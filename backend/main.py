@@ -6,16 +6,12 @@ import uuid
 import asyncio
 from datetime import datetime
 
-# Initialize the FastAPI application
-# This 'app' variable is what Uvicorn looks for!
 app = FastAPI(
     title="MedDesign AI API",
     description="Backend service for orchestrating de novo protein design workflows.",
     version="1.0.0"
 )
 
-# Configure CORS for your specific frontend URL
-# Replace '*' with your actual Render frontend URL for better security later
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -75,7 +71,7 @@ async def execute_protein_design_pipeline(job_id: str, request: DesignRequest):
     except Exception as e:
         JOBS_DB[job_id]["status"] = "error"
 
-@app.post("/api/v1/design/submit")
+@app.post("/api/v1/design/submit", response_model=JobStatusResponse)
 async def submit_design_job(request: DesignRequest, background_tasks: BackgroundTasks):
     job_id = f"PRJ-{uuid.uuid4().hex[:6].upper()}"
     JOBS_DB[job_id] = {
@@ -84,9 +80,8 @@ async def submit_design_job(request: DesignRequest, background_tasks: Background
     background_tasks.add_task(execute_protein_design_pipeline, job_id, request)
     return JOBS_DB[job_id]
 
-@app.get("/api/v1/design/status/{job_id}")
+@app.get("/api/v1/design/status/{job_id}", response_model=JobStatusResponse)
 async def get_job_status(job_id: str):
     if job_id not in JOBS_DB:
         raise HTTPException(status_code=404, detail="Job not found")
     return JOBS_DB[job_id]
-```
