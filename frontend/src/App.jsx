@@ -1,20 +1,24 @@
 import React, { useState } from 'react';
-import { Dna, Play, Activity } from 'lucide-react';
-//
-// This reads the variable we set in the Render Dashboard
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { Dna, Play, Activity, Loader2 } from 'lucide-react';
 
-// Change this line:
+// Using Vite's environment variable syntax
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export default function App() {
   const [status, setStatus] = useState('idle');
+  const [error, setError] = useState(null);
 
   const handleGenerate = async () => {
     setStatus('running');
+    setError(null);
+    
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/design/submit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           pdb_id: '1TUP',
           target_chain: 'A',
@@ -22,17 +26,26 @@ export default function App() {
           binder_length: 50
         })
       });
+
+      // Check if response is not ok
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server returned ${response.status}: ${errorText}`);
+      }
+
+      // Read response as JSON
       const data = await response.json();
-      console.log("Job submitted:", data);
+      console.log("Job submitted successfully:", data);
       setStatus('completed');
     } catch (err) {
       console.error("API error:", err);
+      setError(err.message);
       setStatus('error');
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8">
+    <div className="min-h-screen bg-slate-50 p-8 font-sans">
       <header className="max-w-4xl mx-auto mb-8">
         <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
           <Dna className="text-blue-600" /> MedDesign AI
@@ -42,21 +55,45 @@ export default function App() {
       <main className="max-w-4xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
         <div className="mb-6">
           <h2 className="text-xl font-semibold mb-2">Design Pipeline</h2>
-          <p className="text-slate-600">Current API URL: {API_BASE_URL}</p>
+          <p className="text-sm text-slate-500 bg-slate-100 p-2 rounded truncate">
+            Backend URL: {API_BASE_URL}
+          </p>
         </div>
 
         <button 
           onClick={handleGenerate}
           disabled={status === 'running'}
-          className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 hover:bg-blue-700 disabled:opacity-50"
+          className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 hover:bg-blue-700 disabled:opacity-50 transition-all"
         >
-          <Play size={20} /> {status === 'running' ? 'Running...' : 'Start Pipeline'}
+          {status === 'running' ? (
+            <Loader2 className="animate-spin" size={20} />
+          ) : (
+            <Play size={20} />
+          )} 
+          {status === 'running' ? 'Processing...' : 'Start Pipeline'}
         </button>
 
-        <div className="mt-6 p-4 bg-slate-100 rounded-lg">
-          <p>Status: <span className="font-mono font-bold">{status}</span></p>
+        {error && (
+          <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-lg text-sm border border-red-200">
+            <strong>Error:</strong> {error}
+          </div>
+        )}
+
+        <div className="mt-6 p-4 bg-slate-100 rounded-lg border border-slate-200">
+          <p className="text-slate-600 text-sm">Status: <span className="font-mono font-bold text-slate-900">{status}</span></p>
         </div>
       </main>
     </div>
   );
 }
+```eof
+
+### Critical Checklist for this to work:
+
+1.  **CORS Update:** Make sure you have already updated your `backend/main.py` with the correct `allow_origins` URL and pushed that code to GitHub.
+2.  **Environment Variable:** Go to your Render **Frontend** service -> **Settings** -> **Environment**.
+    *   Ensure the key is **`VITE_API_URL`** (exactly that).
+    *   Ensure the value is `[https://meddesign-backend.onrender.com](https://meddesign-backend.onrender.com)` (no trailing slash).
+3.  **Redeploy:** After pushing the code changes above and updating the Environment Variable name to `VITE_API_URL` (instead of `REACT_APP_...`), **manually trigger a redeploy** of your Frontend service on Render.
+
+If it still throws an error, check the **Console** tab in your Browser (F12) again. The `throw new Error` inside my code above will now print the actual error text provided by the server, which will tell us exactly what's wrong!
