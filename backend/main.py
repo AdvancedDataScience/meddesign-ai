@@ -79,12 +79,15 @@ async def submit_design_job(request: DesignRequest, background_tasks: Background
     }
     background_tasks.add_task(execute_protein_design_pipeline, job_id, request)
     return JOBS_DB[job_id]
+# ... existing code (keep everything before the root function) ...
 
 @app.get("/api/v1/design/status/{job_id}", response_model=JobStatusResponse)
 async def get_job_status(job_id: str):
     if job_id not in JOBS_DB:
         raise HTTPException(status_code=404, detail="Job not found")
     return JOBS_DB[job_id]
+
+# Ensure there are NO spaces at the start of this line:
 @app.get("/")
-   async def root():
-       return {"message": "MedDesign AI API is running"}
+async def root():
+    return {"message": "MedDesign AI API is running"}
