@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Dna, Play, Activity, Loader2 } from 'lucide-react';
 
-// Using Vite's environment variable syntax
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export default function App() {
@@ -27,13 +26,11 @@ export default function App() {
         })
       });
 
-      // Check if response is not ok
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Server returned ${response.status}: ${errorText}`);
       }
 
-      // Read response as JSON
       const data = await response.json();
       console.log("Job submitted successfully:", data);
       setStatus('completed');
@@ -86,14 +83,3 @@ export default function App() {
     </div>
   );
 }
-```eof
-
-### Critical Checklist for this to work:
-
-1.  **CORS Update:** Make sure you have already updated your `backend/main.py` with the correct `allow_origins` URL and pushed that code to GitHub.
-2.  **Environment Variable:** Go to your Render **Frontend** service -> **Settings** -> **Environment**.
-    *   Ensure the key is **`VITE_API_URL`** (exactly that).
-    *   Ensure the value is `[https://meddesign-backend.onrender.com](https://meddesign-backend.onrender.com)` (no trailing slash).
-3.  **Redeploy:** After pushing the code changes above and updating the Environment Variable name to `VITE_API_URL` (instead of `REACT_APP_...`), **manually trigger a redeploy** of your Frontend service on Render.
-
-If it still throws an error, check the **Console** tab in your Browser (F12) again. The `throw new Error` inside my code above will now print the actual error text provided by the server, which will tell us exactly what's wrong!
