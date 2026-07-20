@@ -23,6 +23,7 @@ import {
   Plus
 } from 'lucide-react';
 import * as THREE from 'three';
+const API_BASE_URL = 'https://meddesign-backend.onrender.com';
 
 // This component simulates a 3D protein viewer using Three.js
 const MolecularViewer = ({ status, selectedCandidate }) => {
@@ -223,7 +224,6 @@ export default function App() {
   ];
 
   // Real API Execution replacing the simulation
-  const API_BASE_URL = 'https://meddesign-backend.onrender.com';
   
   const handleGenerate = async () => {
     setJobStatus('provisioning');
