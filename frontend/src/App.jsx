@@ -12,6 +12,7 @@ export default function App() {
     setError(null);
     
     try {
+      
       const response = await fetch(`${API_BASE_URL}/api/v1/design/submit`, {
       //const response = await fetch(`${API_BASE_URL}/api/v1/design/submit/`, {
         method: 'POST',
