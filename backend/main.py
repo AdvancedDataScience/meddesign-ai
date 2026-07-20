@@ -85,3 +85,6 @@ async def get_job_status(job_id: str):
     if job_id not in JOBS_DB:
         raise HTTPException(status_code=404, detail="Job not found")
     return JOBS_DB[job_id]
+@app.get("/")
+   async def root():
+       return {"message": "MedDesign AI API is running"}
