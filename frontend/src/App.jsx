@@ -223,9 +223,8 @@ export default function App() {
   ];
 
   // Real API Execution replacing the simulation
-  const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) 
-  ? import.meta.env.VITE_API_URL 
-  : 'https://meddesign-backend.onrender.com';
+  const API_BASE_URL = 'https://meddesign-backend.onrender.com';
+  
   const handleGenerate = async () => {
     setJobStatus('provisioning');
     setProgress(5);
