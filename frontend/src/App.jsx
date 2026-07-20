@@ -1,122 +1,60 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import React, { useState } from 'react';
+import { Dna, Play, Activity } from 'lucide-react';
 
-function App() {
-  const [count, setCount] = useState(0)
+// This reads the variable we set in the Render Dashboard
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+export default function App() {
+  const [status, setStatus] = useState('idle');
+
+  const handleGenerate = async () => {
+    setStatus('running');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/design/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pdb_id: '1TUP',
+          target_chain: 'A',
+          hotspot: '248',
+          binder_length: 50
+        })
+      });
+      const data = await response.json();
+      console.log("Job submitted:", data);
+      setStatus('completed');
+    } catch (err) {
+      console.error("API error:", err);
+      setStatus('error');
+    }
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="min-h-screen bg-slate-50 p-8">
+      <header className="max-w-4xl mx-auto mb-8">
+        <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
+          <Dna className="text-blue-600" /> MedDesign AI
+        </h1>
+      </header>
+
+      <main className="max-w-4xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold mb-2">Design Pipeline</h2>
+          <p className="text-slate-600">Current API URL: {API_BASE_URL}</p>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
+
+        <button 
+          onClick={handleGenerate}
+          disabled={status === 'running'}
+          className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 hover:bg-blue-700 disabled:opacity-50"
         >
-          Count is {count}
+          <Play size={20} /> {status === 'running' ? 'Running...' : 'Start Pipeline'}
         </button>
-      </section>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+        <div className="mt-6 p-4 bg-slate-100 rounded-lg">
+          <p>Status: <span className="font-mono font-bold">{status}</span></p>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      </main>
+    </div>
+  );
 }
-
-export default App
