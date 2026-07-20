@@ -182,3 +182,6 @@
     border-right-color: var(--border);
   }
 }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
