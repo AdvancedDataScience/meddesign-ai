@@ -71,7 +71,7 @@ async def execute_protein_design_pipeline(job_id: str, request: DesignRequest):
     except Exception as e:
         JOBS_DB[job_id]["status"] = "error"
 
-@app.post("/api/v1/design/submit", response_model=JobStatusResponse)
+@app.post("/api/v1/design/submit/", response_model=JobStatusResponse)
 async def submit_design_job(request: DesignRequest, background_tasks: BackgroundTasks):
     job_id = f"PRJ-{uuid.uuid4().hex[:6].upper()}"
     JOBS_DB[job_id] = {
