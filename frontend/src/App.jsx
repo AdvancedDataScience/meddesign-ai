@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Dna, Play, Activity, Loader2 } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
+//const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Change this line in App.jsx:
+const API_BASE_URL = "https://meddesign-backend.onrender.com";
 export default function App() {
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
