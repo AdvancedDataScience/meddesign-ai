@@ -1,0 +1,25 @@
+version: '3.8'
+services:
+backend:
+build:
+context: ./backend
+ports:
+- "8000:8000"
+environment:
+- ENVIRONMENT=production
+networks:
+- meddesign_network
+
+frontend:
+build:
+context: ./frontend
+ports:
+- "80:80"
+depends_on:
+- backend
+networks:
+- meddesign_network
+
+networks:
+meddesign_network:
+driver: bridge
