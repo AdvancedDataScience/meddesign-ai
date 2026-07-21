@@ -24,7 +24,6 @@ import {
 } from 'lucide-react';
 import * as THREE from 'three';
 
-// Production backend URL connected to your live FastAPI service
 const API_BASE_URL = 'https://meddesign-backend.onrender.com';
 
 const MolecularViewer = ({ status, selectedCandidate }) => {
@@ -174,24 +173,20 @@ export default function App() {
   
   const [jobStatus, setJobStatus] = useState('idle');
   const [progress, setProgress] = useState(0);
+  const [activeJobId, setActiveJobId] = useState(null);
   const [candidates, setCandidates] = useState([]);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
 
-  const mockHistory = [
-    { id: 'PRJ-1042', target: '1TUP (Chain A)', date: '2026-07-18', status: 'Completed', candidates: 124, bestAffinity: -13.2 },
-    { id: 'PRJ-1041', target: '6VXX (Chain B)', date: '2026-07-15', status: 'Completed', candidates: 89, bestAffinity: -11.8 },
-    { id: 'PRJ-1040', target: '3CLO (Chain A)', date: '2026-07-10', status: 'Failed', candidates: 0, bestAffinity: null },
-    { id: 'PRJ-1039', target: '7BYR (Chain C)', date: '2026-07-02', status: 'Completed', candidates: 450, bestAffinity: -14.5 },
-    { id: 'PRJ-1038', target: '1BRS (Chain D)', date: '2026-06-28', status: 'Completed', candidates: 32, bestAffinity: -9.4 },
-  ];
+  // Dynamic project history state seeded with initial samples
+  const [projectHistory, setProjectHistory] = useState([
+    { id: 'PRJ-1042', target: '1TUP (Chain A)', date: '2026-07-18', status: 'Completed', candidates: 2, bestAffinity: -13.2 },
+    { id: 'PRJ-1041', target: '6VXX (Chain B)', date: '2026-07-15', status: 'Completed', candidates: 2, bestAffinity: -11.8 },
+  ]);
 
   const mockAssets = [
     { id: 'AST-001', name: '1TUP_cleaned.pdb', type: 'Target', size: '2.4 MB', date: '2026-07-19', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-100' },
     { id: 'AST-002', name: 'Helical_Scaffold_v3', type: 'Scaffold', size: '156 KB', date: '2026-07-10', icon: Layers, color: 'text-purple-500', bg: 'bg-purple-100' },
     { id: 'AST-003', name: 'Binder_Design_042', type: 'Generated Binder', size: '42 KB', date: '2026-07-18', icon: Box, color: 'text-emerald-500', bg: 'bg-emerald-100' },
-    { id: 'AST-004', name: '7BYR_ChainC_prep', type: 'Target', size: '3.1 MB', date: '2026-07-02', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-100' },
-    { id: 'AST-005', name: 'BetaSheet_Motif_A', type: 'Motif', size: '89 KB', date: '2026-06-15', icon: Puzzle, color: 'text-amber-500', bg: 'bg-amber-100' },
-    { id: 'AST-006', name: 'Binder_Design_017', type: 'Generated Binder', size: '45 KB', date: '2026-07-18', icon: Box, color: 'text-emerald-500', bg: 'bg-emerald-100' },
   ];
 
   const handleGenerate = async () => {
@@ -215,6 +210,7 @@ export default function App() {
       if (!response.ok) throw new Error("Failed to submit job to backend");
       
       const data = await response.json();
+      setActiveJobId(data.job_id);
       pollStatus(data.job_id);
       
     } catch (error) {
@@ -233,10 +229,25 @@ export default function App() {
       setProgress(data.progress);
 
       if (data.status === 'completed') {
-        setCandidates(data.candidates || []);
-        if (data.candidates && data.candidates.length > 0) {
-          setSelectedCandidate(data.candidates[0]);
+        const fetchedCandidates = data.candidates || [];
+        setCandidates(fetchedCandidates);
+        if (fetchedCandidates.length > 0) {
+          setSelectedCandidate(fetchedCandidates[0]);
         }
+
+        // Automatically record this completed run into Project History
+        const bestAffinity = fetchedCandidates.length > 0 ? Math.min(...fetchedCandidates.map(c => c.affinity)) : 0;
+        const newProjectRecord = {
+          id: jobId,
+          target: `${pdbId.toUpperCase()} (Chain ${targetChain})`,
+          date: new Date().toISOString().split('T')[0],
+          status: 'Completed',
+          candidates: fetchedCandidates.length,
+          bestAffinity: bestAffinity
+        };
+
+        setProjectHistory(prev => [newProjectRecord, ...prev.filter(p => p.id !== jobId)]);
+
       } else if (data.status === 'error') {
         setJobStatus('error');
       } else {
@@ -378,7 +389,7 @@ export default function App() {
                 <div className="col-span-1 text-right pr-2">Status</div>
               </div>
               <div className="divide-y divide-slate-100">
-                {mockHistory.map((project) => (
+                {projectHistory.map((project) => (
                   <div key={project.id} className="grid grid-cols-6 gap-4 p-4 items-center hover:bg-slate-50 transition-colors">
                     <div className="col-span-1 font-semibold text-slate-800 pl-2">{project.id}</div>
                     <div className="col-span-1 text-slate-500 text-sm flex items-center gap-1.5"><Calendar size={14}/>{project.date}</div>
