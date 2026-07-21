@@ -173,11 +173,10 @@ export default function App() {
   
   const [jobStatus, setJobStatus] = useState('idle');
   const [progress, setProgress] = useState(0);
-  const [activeJobId, setActiveJobId] = useState(null);
   const [candidates, setCandidates] = useState([]);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
 
-  // Dynamic project history state seeded with initial samples
+  // Dynamic project history state
   const [projectHistory, setProjectHistory] = useState([
     { id: 'PRJ-1042', target: '1TUP (Chain A)', date: '2026-07-18', status: 'Completed', candidates: 2, bestAffinity: -13.2 },
     { id: 'PRJ-1041', target: '6VXX (Chain B)', date: '2026-07-15', status: 'Completed', candidates: 2, bestAffinity: -11.8 },
@@ -210,7 +209,6 @@ export default function App() {
       if (!response.ok) throw new Error("Failed to submit job to backend");
       
       const data = await response.json();
-      setActiveJobId(data.job_id);
       pollStatus(data.job_id);
       
     } catch (error) {
@@ -259,6 +257,33 @@ export default function App() {
     }
   };
 
+  // Helper function to trigger file downloads for PDB structure or FASTA sequence
+  const downloadFile = (filename, content, mimeType) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPDB = () => {
+    if (!selectedCandidate) return;
+    const mockPdbContent = `HEADER    DE NOVO DESIGNED BINDING PROTEIN\nCOMPND    ID: ${selectedCandidate.id}\nAUTHOR    MEDDESIGN AI ORCHESTRATOR\nATOM      1  N   MET A   1      {Math.random().toFixed(3)}  {Math.random().toFixed(3)}  {Math.random().toFixed(3)}  1.00 95.00          N\nATOM      2  CA  MET A   1      {Math.random().toFixed(3)}  {Math.random().toFixed(3)}  {Math.random().toFixed(3)}  1.00 95.00          C\nEND`;
+    downloadFile(`${selectedCandidate.id}_structure.pdb`, mockPdbContent, 'text/plain');
+  };
+
+  const handleDownloadFasta = () => {
+    if (!selectedCandidate) return;
+    // Translate protein sequence to RNA sequence simulation (A->A, C->C, G->G, U/T)
+    const rnaSequence = selectedCandidate.sequence.replace(/T/g, 'U');
+    const fastaContent = `> ${selectedCandidate.id} | Designed Protein Sequence\n${selectedCandidate.sequence}\n> ${selectedCandidate.id}_mRNA | Translated RNA Codon Sequence\n${rnaSequence}`;
+    downloadFile(`${selectedCandidate.id}_sequences.fasta`, fastaContent, 'text/plain');
+  };
+
   return (
     <div className="flex h-screen bg-slate-100 font-sans text-slate-900">
       <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col hidden md:flex shrink-0">
@@ -293,6 +318,16 @@ export default function App() {
                'Manage target PDBs, scaffolds, and generated binders.'}
             </p>
           </div>
+          {jobStatus === 'completed' && selectedCandidate && activeTab === 'new_design' && (
+            <div className="flex gap-3">
+              <button onClick={handleDownloadPDB} className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-xl text-sm flex items-center gap-2 shadow-sm transition-all">
+                <Download size={16} /> Download PDB Structure
+              </button>
+              <button onClick={handleDownloadFasta} className="bg-purple-600 hover:bg-purple-700 text-white font-medium px-4 py-2 rounded-xl text-sm flex items-center gap-2 shadow-sm transition-all">
+                <Download size={16} /> Download Protein/RNA FASTA
+              </button>
+            </div>
+          )}
         </header>
 
         {activeTab === 'new_design' && (
@@ -368,6 +403,7 @@ export default function App() {
                         <div key={cand.id} onClick={() => setSelectedCandidate(cand)} className={`min-w-[260px] p-4 rounded-xl border-2 cursor-pointer ${selectedCandidate?.id === cand.id ? 'border-blue-500 bg-blue-50/40' : 'border-slate-200'}`}>
                           <div className="font-bold text-slate-700 mb-2">{cand.id}</div>
                           <div className="text-sm">Affinity: {cand.affinity} | pLDDT: {cand.plddt}</div>
+                          <div className="text-xs text-slate-500 mt-2 truncate font-mono">Seq: {cand.sequence}</div>
                         </div>
                       ))}
                     </div>
