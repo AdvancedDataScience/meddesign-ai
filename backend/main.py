@@ -5,19 +5,20 @@ from typing import List, Optional
 import uuid
 import asyncio
 from datetime import datetime
+import os
 
-# Initialize the FastAPI application
 app = FastAPI(
     title="MedDesign AI API",
     description="Backend service for orchestrating de novo protein design workflows.",
     version="1.0.0"
 )
 
-# Configure CORS for your specific frontend URL
-# NOTE: Ensure this matches your live frontend URL exactly
+# Replace with your actual deployed frontend URL
+FRONTEND_URL = "https://frontend-slr4.onrender.com"
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://frontend-slr4.onrender.com"],
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,15 +56,35 @@ async def execute_protein_design_pipeline(job_id: str, request: DesignRequest):
         
         JOBS_DB[job_id]["status"] = "completed"
         JOBS_DB[job_id]["progress"] = 100
+        JOBS_DB[job_id]["message"] = f"Pipeline complete for target: {request.pdb_id}"
+        
+        # Dynamically generate results based on request.pdb_id
         JOBS_DB[job_id]["candidates"] = [
-            {"id": "Design_042", "affinity": -13.2, "pae": 2.8, "plddt": 94.5, "status": "High", "color": "#3b82f6", "sequence": "MTEYKLVVVGAGGVGKSALTIQLIQNHFVDEYDPTI"}
+            {
+                "id": f"{request.pdb_id}_Bind_A", 
+                "affinity": -13.2, 
+                "pae": 2.8, 
+                "plddt": 94.5, 
+                "status": "High", 
+                "color": "#3b82f6", 
+                "sequence": "MTEYKLVVVGAGGVGKSALTIQLIQNHFVDEYDPTI"
+            },
+            {
+                "id": f"{request.pdb_id}_Bind_B", 
+                "affinity": -11.5, 
+                "pae": 3.5, 
+                "plddt": 89.2, 
+                "status": "Med", 
+                "color": "#10b981", 
+                "sequence": "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSR"
+            }
         ]
     except Exception as e:
         JOBS_DB[job_id]["status"] = "error"
+        JOBS_DB[job_id]["message"] = f"Error: {str(e)}"
 
-@app.post("/api/v1/design/submit")
+@app.post("/api/v1/design/submit", response_model=JobStatusResponse)
 async def submit_design_job(request: DesignRequest, background_tasks: BackgroundTasks):
-    print(f"DEBUG: Received request: {request}")
     job_id = f"PRJ-{uuid.uuid4().hex[:6].upper()}"
     JOBS_DB[job_id] = {
         "job_id": job_id, "status": "idle", "progress": 0, "message": "Queued"
@@ -71,16 +92,13 @@ async def submit_design_job(request: DesignRequest, background_tasks: Background
     background_tasks.add_task(execute_protein_design_pipeline, job_id, request)
     return JOBS_DB[job_id]
 
-@app.get("/api/v1/design/status/{job_id}")
+@app.get("/api/v1/design/status/{job_id}", response_model=JobStatusResponse)
 async def get_job_status(job_id: str):
     if job_id not in JOBS_DB:
         raise HTTPException(status_code=404, detail="Job not found")
     return JOBS_DB[job_id]
 
-@app.get("/")
-async def root():
-    return {"message": "MedDesign AI API is running"}
-
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
