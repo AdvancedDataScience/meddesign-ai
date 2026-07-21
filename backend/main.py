@@ -10,7 +10,7 @@ import requests
 app = FastAPI(
     title="MedDesign AI API",
     description="Backend service orchestrating real RFdiffusion and ProteinMPNN workflows via Neurosnap.",
-    version="2.0.1"
+    version="2.0.2"
 )
 
 FRONTEND_URL = "https://frontend-slr4.onrender.com"
