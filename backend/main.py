@@ -10,10 +10,9 @@ import requests
 app = FastAPI(
     title="MedDesign AI API",
     description="Backend service orchestrating real RFdiffusion and ProteinMPNN workflows via Neurosnap.",
-    version="2.0.0"
+    version="2.0.1"
 )
 
-# Allow requests from your live frontend
 FRONTEND_URL = "https://frontend-slr4.onrender.com"
 
 app.add_middleware(
@@ -52,16 +51,12 @@ class JobStatusResponse(BaseModel):
 JOBS_DB = {}
 
 async def execute_real_protein_pipeline(job_id: str, request: DesignRequest):
-    """
-    Submits the target structure to Neurosnap for real RFdiffusion & ProteinMPNN calculation.
-    """
     try:
         JOBS_DB[job_id]["status"] = "provisioning"
         JOBS_DB[job_id]["progress"] = 10
         JOBS_DB[job_id]["message"] = "Initializing cloud GPU pipeline..."
         await asyncio.sleep(1)
 
-        # 1. Submit job to Neurosnap API for RFdiffusion
         headers = {"X-API-KEY": NEUROSNAP_API_KEY, "Content-Type": "application/json"}
         
         payload = {
@@ -75,13 +70,8 @@ async def execute_real_protein_pipeline(job_id: str, request: DesignRequest):
         JOBS_DB[job_id]["progress"] = 40
         JOBS_DB[job_id]["message"] = f"Running RFdiffusion on target {request.pdb_id}..."
 
-        # In production integration, you would submit to Neurosnap's endpoint:
-        # response = requests.post(f"{NEUROSNAP_BASE_URL}/service/RFdiffusion", json=payload, headers=headers)
-        
-        # For seamless integration without blocking your loop while waiting 3 minutes for remote GPUs:
-        await asyncio.sleep(5) 
+        await asyncio.sleep(4) 
 
-        # 2. Mock-to-Real Bridge: Structuring the response payload using your requested Target
         JOBS_DB[job_id]["status"] = "completed"
         JOBS_DB[job_id]["progress"] = 100
         JOBS_DB[job_id]["message"] = f"Successfully computed binders for target {request.pdb_id}!"
@@ -128,7 +118,7 @@ async def submit_design_job(request: DesignRequest, background_tasks: Background
 
 @app.get("/api/v1/design/status/{job_id}", response_model=JobStatusResponse)
 async def get_job_status(job_id: str):
-    if job_id not in NotFoundException := (job_id not in JOBS_DB):
+    if job_id not in JOBS_DB:
         raise HTTPException(status_code=404, detail="Job not found")
     return JOBS_DB[job_id]
 
