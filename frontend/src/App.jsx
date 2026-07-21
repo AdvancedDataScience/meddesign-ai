@@ -98,7 +98,7 @@ const MolecularViewer = ({ status, selectedCandidate }) => {
     scene.add(targetProtein);
 
     let binderProtein = null;
-    if (status === 'completed' && selectedCandidate) {
+    if (selectedCandidate) {
       const color = selectedCandidate.color || '#3b82f6';
       binderProtein = generateProteinChain(45, {x: 10, y: 5, z: 10}, color, 1.0);
       binderProtein.position.set(12, 5, 8);
@@ -156,7 +156,7 @@ const MolecularViewer = ({ status, selectedCandidate }) => {
       cancelAnimationFrame(animationFrameId);
       if (mountRef.current) mountRef.current.innerHTML = '';
     };
-  }, [status, selectedCandidate]);
+  }, [selectedCandidate]);
 
   return (
     <div className="w-full h-full relative rounded-xl overflow-hidden border border-slate-200 shadow-inner bg-slate-50">
@@ -166,7 +166,7 @@ const MolecularViewer = ({ status, selectedCandidate }) => {
           <div className="w-3 h-3 rounded-full bg-slate-400"></div>
           Target (Tumor Marker)
         </div>
-        {status === 'completed' && selectedCandidate && (
+        {selectedCandidate && (
           <div className="flex items-center gap-2 bg-white/90 backdrop-blur px-3 py-1.5 rounded-full shadow-sm text-xs font-medium text-slate-600 border border-slate-200">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: selectedCandidate.color || '#3b82f6' }}></div>
             Candidate: {selectedCandidate.id}
@@ -200,6 +200,7 @@ export default function App() {
       date: '2026-07-18',
       status: 'Completed',
       bestAffinity: -14.1,
+      selectedCandIndex: 0,
       candidates: [
         {
           id: '1TUP_NS_01',
@@ -209,6 +210,15 @@ export default function App() {
           color: '#3b82f6',
           sequence: 'MAEVKLEIKADGTVLESIKFEGDTVIEFNGDTIIE',
           pdb: 'HEADER    DE NOVO BINDING PROTEIN 1TUP_NS_01\nATOM      1  N   MET A   1      12.452  18.321  5.432  1.00 96.20     N\nATOM      2  CA  MET A   1      13.123  19.112  6.211  1.00 96.20     C\nEND'
+        },
+        {
+          id: '1TUP_NS_02',
+          affinity: -12.4,
+          pae: 3.0,
+          plddt: 91.5,
+          color: '#10b981',
+          sequence: 'MQYKLVVVGAGGVGKSALTIQLIQNHFVDEYDPTI',
+          pdb: 'HEADER    DE NOVO BINDING PROTEIN 1TUP_NS_02\nATOM      1  N   MET A   1      10.123  15.431  4.112  1.00 91.50     N\nEND'
         }
       ]
     }
@@ -246,7 +256,7 @@ export default function App() {
       const unsubscribeSnap = onSnapshot(q, (snapshot) => {
         const loadedProjects = [];
         snapshot.forEach((doc) => {
-          loadedProjects.push({ id: doc.id, ...doc.data() });
+          loadedProjects.push({ id: doc.id, selectedCandIndex: 0, ...doc.data() });
         });
         if (loadedProjects.length > 0) {
           setProjectHistory(prev => {
@@ -326,13 +336,13 @@ export default function App() {
           date: new Date().toISOString().split('T')[0],
           status: 'Completed',
           bestAffinity: bestAffinity,
+          selectedCandIndex: 0,
           candidates: fetchedCandidates
         };
 
         setProjectHistory(prev => [newProjectRecord, ...prev.filter(p => p.id !== jobId)]);
         saveProjectToCloud(newProjectRecord);
 
-        // Automatically populate generated model files into Asset Library
         const newAssets = fetchedCandidates.flatMap(cand => [
           {
             id: `AST-${Math.random().toString(36).substring(2, 7)}`,
@@ -386,6 +396,15 @@ export default function App() {
     downloadFile(asset.name, asset.content || 'MODEL DATA', 'text/plain');
   };
 
+  const handleSelectHistoryCandidate = (projectId, index) => {
+    setProjectHistory(prev => prev.map(proj => {
+      if (proj.id === projectId) {
+        return { ...proj, selectedCandIndex: index };
+      }
+      return proj;
+    }));
+  };
+
   return (
     <div className="flex h-screen bg-slate-100 font-sans text-slate-900">
       <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col hidden md:flex shrink-0">
@@ -411,12 +430,12 @@ export default function App() {
           <div>
             <h1 className="text-2xl font-bold text-slate-800">
               {activeTab === 'new_design' ? 'De Novo Binder Design' : 
-               activeTab === 'history' ? 'Project History & Model Previews' : 
+               activeTab === 'history' ? 'Project History & Interactive Previews' : 
                'Asset Library & Model Downloads'}
             </h1>
             <p className="text-sm text-slate-500 mt-1">
               {activeTab === 'new_design' ? 'Design novel proteins targeting specific tumor markers via Neurosnap.' : 
-               activeTab === 'history' ? 'Review past AI generation runs and inspect structural animations.' : 
+               activeTab === 'history' ? 'Click on any candidate below to responsively update the 3D render preview.' : 
                'Access and download all generated PDB structure files and FASTA/RNA sequence records.'}
             </p>
           </div>
@@ -508,43 +527,51 @@ export default function App() {
         {activeTab === 'history' && (
           <div className="flex-1 p-8 overflow-y-auto bg-slate-50/50">
             <div className="max-w-6xl mx-auto space-y-6">
-              {projectHistory.map((project) => (
-                <div key={project.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col gap-6">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                    <div>
-                      <span className="font-bold text-lg text-slate-800">{project.id}</span>
-                      <span className="ml-3 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{project.target}</span>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-slate-500">
-                      <span className="flex items-center gap-1.5"><Calendar size={14}/> {project.date}</span>
-                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 flex items-center gap-1"><CheckCircle2 size={12}/> {project.status}</span>
-                    </div>
-                  </div>
+              {projectHistory.map((project) => {
+                const activeIndex = project.selectedCandIndex || 0;
+                const activeCand = project.candidates?.[activeIndex] || project.candidates?.[0];
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
-                    <div className="h-64">
-                      <MolecularViewer status="completed" selectedCandidate={project.candidates?.[0]} />
+                return (
+                  <div key={project.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col gap-6">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                      <div>
+                        <span className="font-bold text-lg text-slate-800">{project.id}</span>
+                        <span className="ml-3 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{project.target}</span>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-slate-500">
+                        <span className="flex items-center gap-1.5"><Calendar size={14}/> {project.date}</span>
+                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 flex items-center gap-1"><CheckCircle2 size={12}/> {project.status}</span>
+                      </div>
                     </div>
-                    <div className="space-y-4">
-                      <h4 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
-                        <Trophy size={16} className="text-amber-500" /> Candidate Models & Biophysical Metrics
-                      </h4>
-                      <div className="space-y-3">
-                        {project.candidates && project.candidates.map((cand) => (
-                          <div key={cand.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50 flex flex-col gap-2">
-                            <div className="flex justify-between items-center">
-                              <span className="font-bold text-slate-800">{cand.id}</span>
-                              <span className="text-xs font-mono text-blue-600 font-semibold">Affinity: {cand.affinity}</span>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                      <div className="h-72">
+                        <MolecularViewer selectedCandidate={activeCand} />
+                      </div>
+                      <div className="space-y-4">
+                        <h4 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+                          <Trophy size={16} className="text-amber-500" /> Select Candidate to Preview & Download
+                        </h4>
+                        <div className="space-y-3">
+                          {project.candidates && project.candidates.map((cand, idx) => (
+                            <div 
+                              key={cand.id} 
+                              onClick={() => handleSelectHistoryCandidate(project.id, idx)}
+                              className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${activeIndex === idx ? 'border-blue-500 bg-blue-50/40 shadow-xs' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}`}
+                            >
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="font-bold text-slate-800">{cand.id}</span>
+                                <span className="text-xs font-mono text-blue-600 font-semibold">Affinity: {cand.affinity}</span>
+                              </div>
+                              <div className="text-xs text-slate-500">pLDDT: {cand.plddt} | PAE: {cand.pae}</div>
                             </div>
-                            <div className="text-xs text-slate-500">pLDDT: {cand.plddt} | PAE: {cand.pae}</div>
-                            <div className="text-xs font-mono text-slate-600 truncate">Seq: {cand.sequence}</div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
