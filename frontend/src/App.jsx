@@ -20,18 +20,17 @@ import {
   MoreVertical,
   FileText,
   Puzzle,
-  Plus
+  Plus,
+  Eye
 } from 'lucide-react';
 import * as THREE from 'three';
 
-// Firebase imports
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, query } from 'firebase/firestore';
 
 const API_BASE_URL = 'https://meddesign-backend.onrender.com';
 
-// Firebase initialization
 let app, auth, db, appId;
 try {
   const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
@@ -207,6 +206,7 @@ export default function App() {
           affinity: -14.1,
           pae: 2.1,
           plddt: 96.2,
+          color: '#3b82f6',
           sequence: 'MAEVKLEIKADGTVLESIKFEGDTVIEFNGDTIIE',
           pdb: 'HEADER    DE NOVO BINDING PROTEIN 1TUP_NS_01\nATOM      1  N   MET A   1      12.452  18.321  5.432  1.00 96.20     N\nATOM      2  CA  MET A   1      13.123  19.112  6.211  1.00 96.20     C\nEND'
         }
@@ -214,13 +214,13 @@ export default function App() {
     }
   ]);
 
-  const mockAssets = [
-    { id: 'AST-001', name: '1TUP_cleaned.pdb', type: 'Target', size: '2.4 MB', date: '2026-07-19', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-100' },
-    { id: 'AST-002', name: 'Helical_Scaffold_v3', type: 'Scaffold', size: '156 KB', date: '2026-07-10', icon: Layers, color: 'text-purple-500', bg: 'bg-purple-100' },
-    { id: 'AST-003', name: 'Binder_Design_042', type: 'Generated Binder', size: '42 KB', date: '2026-07-18', icon: Box, color: 'text-emerald-500', bg: 'bg-emerald-100' },
-  ];
+  const [assetLibrary, setAssetLibrary] = useState([
+    { id: 'AST-001', name: '1TUP_cleaned.pdb', type: 'Target', size: '2.4 MB', date: '2026-07-19', content: 'HEADER 1TUP TARGET PDB DATA...', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-100' },
+    { id: 'AST-002', name: 'Helical_Scaffold_v3', type: 'Scaffold', size: '156 KB', date: '2026-07-10', content: 'HEADER SCAFFOLD DATA...', icon: Layers, color: 'text-purple-500', bg: 'bg-purple-100' },
+    { id: 'AST-003', name: '1TUP_NS_01_structure.pdb', type: 'Generated PDB', size: '42 KB', date: '2026-07-18', content: 'HEADER 1TUP_NS_01 PDB...', icon: Box, color: 'text-emerald-500', bg: 'bg-emerald-100' },
+    { id: 'AST-004', name: '1TUP_NS_01_sequences.fasta', type: 'FASTA / RNA', size: '12 KB', date: '2026-07-18', content: '> 1TUP_NS_01\nMAEVKLEIKADG...', icon: Dna, color: 'text-amber-500', bg: 'bg-amber-100' },
+  ]);
 
-  // Auth and Firestore Sync
   useEffect(() => {
     if (!auth) return;
     const initAuth = async () => {
@@ -251,17 +251,13 @@ export default function App() {
         if (loadedProjects.length > 0) {
           setProjectHistory(prev => {
             const combined = [...loadedProjects, ...prev];
-            // Deduplicate by project id
-            const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
-            return unique;
+            return Array.from(new Map(combined.map(item => [item.id, item])).values());
           });
         }
-      }, (error) => {
-        console.error("Firestore snapshot error:", error);
       });
       return () => unsubscribeSnap();
     } catch (err) {
-      console.error("Error setting up Firestore listener:", err);
+      console.error("Firestore listener error:", err);
     }
   }, [user]);
 
@@ -336,6 +332,33 @@ export default function App() {
         setProjectHistory(prev => [newProjectRecord, ...prev.filter(p => p.id !== jobId)]);
         saveProjectToCloud(newProjectRecord);
 
+        // Automatically populate generated model files into Asset Library
+        const newAssets = fetchedCandidates.flatMap(cand => [
+          {
+            id: `AST-${Math.random().toString(36).substring(2, 7)}`,
+            name: `${cand.id}_structure.pdb`,
+            type: 'Generated PDB',
+            size: '42 KB',
+            date: new Date().toISOString().split('T')[0],
+            content: cand.pdb,
+            icon: Box,
+            color: 'text-emerald-500',
+            bg: 'bg-emerald-100'
+          },
+          {
+            id: `AST-${Math.random().toString(36).substring(2, 7)}`,
+            name: `${cand.id}_sequences.fasta`,
+            type: 'FASTA / RNA',
+            size: '12 KB',
+            date: new Date().toISOString().split('T')[0],
+            content: `> ${cand.id} | Protein\n${cand.sequence}\n> ${cand.id}_mRNA\n${cand.sequence.replace(/T/g, 'U')}`,
+            icon: Dna,
+            color: 'text-amber-500',
+            bg: 'bg-amber-100'
+          }
+        ]);
+        setAssetLibrary(prev => [...newAssets, ...prev]);
+
       } else if (data.status === 'error') {
         setJobStatus('error');
       } else {
@@ -359,16 +382,8 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const handleDownloadPDB = (cand) => {
-    if (!cand || !cand.pdb) return;
-    downloadFile(`${cand.id}_structure.pdb`, cand.pdb, 'text/plain');
-  };
-
-  const handleDownloadFasta = (cand) => {
-    if (!cand || !cand.sequence) return;
-    const rnaSequence = cand.sequence.replace(/T/g, 'U');
-    const fastaContent = `> ${cand.id} | Designed Protein Sequence\n${cand.sequence}\n> ${cand.id}_mRNA | Translated RNA Codon Sequence\n${rnaSequence}`;
-    downloadFile(`${cand.id}_sequences.fasta`, fastaContent, 'text/plain');
+  const handleAssetDownload = (asset) => {
+    downloadFile(asset.name, asset.content || 'MODEL DATA', 'text/plain');
   };
 
   return (
@@ -396,25 +411,15 @@ export default function App() {
           <div>
             <h1 className="text-2xl font-bold text-slate-800">
               {activeTab === 'new_design' ? 'De Novo Binder Design' : 
-               activeTab === 'history' ? 'Project History & Cloud Storage' : 
-               'Asset Library'}
+               activeTab === 'history' ? 'Project History & Model Previews' : 
+               'Asset Library & Model Downloads'}
             </h1>
             <p className="text-sm text-slate-500 mt-1">
               {activeTab === 'new_design' ? 'Design novel proteins targeting specific tumor markers via Neurosnap.' : 
-               activeTab === 'history' ? 'Access saved calculation runs from cloud database and download PDB/FASTA files for any candidate.' : 
-               'Manage target PDBs, scaffolds, and generated binders.'}
+               activeTab === 'history' ? 'Review past AI generation runs and inspect structural animations.' : 
+               'Access and download all generated PDB structure files and FASTA/RNA sequence records.'}
             </p>
           </div>
-          {jobStatus === 'completed' && selectedCandidate && activeTab === 'new_design' && (
-            <div className="flex gap-3">
-              <button onClick={() => handleDownloadPDB(selectedCandidate)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-xl text-sm flex items-center gap-2 shadow-sm transition-all">
-                <Download size={16} /> Download PDB
-              </button>
-              <button onClick={() => handleDownloadFasta(selectedCandidate)} className="bg-purple-600 hover:bg-purple-700 text-white font-medium px-4 py-2 rounded-xl text-sm flex items-center gap-2 shadow-sm transition-all">
-                <Download size={16} /> Download FASTA
-              </button>
-            </div>
-          )}
         </header>
 
         {activeTab === 'new_design' && (
@@ -504,7 +509,7 @@ export default function App() {
           <div className="flex-1 p-8 overflow-y-auto bg-slate-50/50">
             <div className="max-w-6xl mx-auto space-y-6">
               {projectHistory.map((project) => (
-                <div key={project.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col gap-4">
+                <div key={project.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col gap-6">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                     <div>
                       <span className="font-bold text-lg text-slate-800">{project.id}</span>
@@ -516,27 +521,27 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {project.candidates && project.candidates.map((cand) => (
-                      <div key={cand.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between gap-3">
-                        <div>
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="font-bold text-slate-800">{cand.id}</span>
-                            <span className="text-xs font-mono text-blue-600 font-semibold">Affinity: {cand.affinity}</span>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                    <div className="h-64">
+                      <MolecularViewer status="completed" selectedCandidate={project.candidates?.[0]} />
+                    </div>
+                    <div className="space-y-4">
+                      <h4 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+                        <Trophy size={16} className="text-amber-500" /> Candidate Models & Biophysical Metrics
+                      </h4>
+                      <div className="space-y-3">
+                        {project.candidates && project.candidates.map((cand) => (
+                          <div key={cand.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50 flex flex-col gap-2">
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold text-slate-800">{cand.id}</span>
+                              <span className="text-xs font-mono text-blue-600 font-semibold">Affinity: {cand.affinity}</span>
+                            </div>
+                            <div className="text-xs text-slate-500">pLDDT: {cand.plddt} | PAE: {cand.pae}</div>
+                            <div className="text-xs font-mono text-slate-600 truncate">Seq: {cand.sequence}</div>
                           </div>
-                          <div className="text-xs text-slate-500">pLDDT: {cand.plddt} | PAE: {cand.pae}</div>
-                          <div className="text-xs font-mono text-slate-600 truncate mt-1">Seq: {cand.sequence}</div>
-                        </div>
-                        <div className="flex gap-2 pt-2 border-t border-slate-200/60">
-                          <button onClick={() => handleDownloadPDB(cand)} className="flex-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-medium py-1.5 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors">
-                            <Download size={14} /> PDB File
-                          </button>
-                          <button onClick={() => handleDownloadFasta(cand)} className="flex-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-medium py-1.5 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors">
-                            <Download size={14} /> FASTA
-                          </button>
-                        </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -548,20 +553,24 @@ export default function App() {
           <div className="flex-1 p-8 overflow-y-auto bg-slate-50/50">
             <div className="max-w-6xl mx-auto flex flex-col gap-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {mockAssets.map((asset) => {
+                {assetLibrary.map((asset) => {
                   const Icon = asset.icon;
                   return (
-                    <div key={asset.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${asset.bg} ${asset.color}`}>
-                          <Icon size={24} />
+                    <div key={asset.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col justify-between">
+                      <div>
+                        <div className="flex justify-between items-start mb-4">
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${asset.bg} ${asset.color}`}>
+                            <Icon size={24} />
+                          </div>
+                          <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md ${asset.color} bg-current/10`}>{asset.type}</span>
                         </div>
+                        <h3 className="font-semibold text-slate-800 text-lg mb-1 truncate">{asset.name}</h3>
                       </div>
-                      <h3 className="font-semibold text-slate-800 text-lg mb-1">{asset.name}</h3>
-                      <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md w-max mb-4 ${asset.color} bg-current/10`}>{asset.type}</span>
-                      <div className="border-t border-slate-100 pt-3 mt-auto flex justify-between text-xs text-slate-500">
-                        <span>{asset.date}</span>
-                        <span className="font-medium text-slate-700">{asset.size}</span>
+                      <div className="border-t border-slate-100 pt-4 mt-4 flex items-center justify-between">
+                        <span className="text-xs text-slate-500">{asset.date} • {asset.size}</span>
+                        <button onClick={() => handleAssetDownload(asset)} className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition-all">
+                          <Download size={14} /> Download
+                        </button>
                       </div>
                     </div>
                   );
