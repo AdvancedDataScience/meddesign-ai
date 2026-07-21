@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import * as THREE from 'three';
 
-// HARDCODED production backend URL to completely bypass local environment issues
+// Production backend URL connected to your live FastAPI service
 const API_BASE_URL = 'https://meddesign-backend.onrender.com';
 
 const MolecularViewer = ({ status, selectedCandidate }) => {
@@ -158,6 +158,9 @@ const MolecularViewer = ({ status, selectedCandidate }) => {
           </div>
         )}
       </div>
+      <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg shadow-sm text-xs text-slate-500 border border-slate-200">
+        Click and drag to rotate
+      </div>
     </div>
   );
 };
@@ -173,6 +176,23 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [candidates, setCandidates] = useState([]);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
+
+  const mockHistory = [
+    { id: 'PRJ-1042', target: '1TUP (Chain A)', date: '2026-07-18', status: 'Completed', candidates: 124, bestAffinity: -13.2 },
+    { id: 'PRJ-1041', target: '6VXX (Chain B)', date: '2026-07-15', status: 'Completed', candidates: 89, bestAffinity: -11.8 },
+    { id: 'PRJ-1040', target: '3CLO (Chain A)', date: '2026-07-10', status: 'Failed', candidates: 0, bestAffinity: null },
+    { id: 'PRJ-1039', target: '7BYR (Chain C)', date: '2026-07-02', status: 'Completed', candidates: 450, bestAffinity: -14.5 },
+    { id: 'PRJ-1038', target: '1BRS (Chain D)', date: '2026-06-28', status: 'Completed', candidates: 32, bestAffinity: -9.4 },
+  ];
+
+  const mockAssets = [
+    { id: 'AST-001', name: '1TUP_cleaned.pdb', type: 'Target', size: '2.4 MB', date: '2026-07-19', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-100' },
+    { id: 'AST-002', name: 'Helical_Scaffold_v3', type: 'Scaffold', size: '156 KB', date: '2026-07-10', icon: Layers, color: 'text-purple-500', bg: 'bg-purple-100' },
+    { id: 'AST-003', name: 'Binder_Design_042', type: 'Generated Binder', size: '42 KB', date: '2026-07-18', icon: Box, color: 'text-emerald-500', bg: 'bg-emerald-100' },
+    { id: 'AST-004', name: '7BYR_ChainC_prep', type: 'Target', size: '3.1 MB', date: '2026-07-02', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-100' },
+    { id: 'AST-005', name: 'BetaSheet_Motif_A', type: 'Motif', size: '89 KB', date: '2026-06-15', icon: Puzzle, color: 'text-amber-500', bg: 'bg-amber-100' },
+    { id: 'AST-006', name: 'Binder_Design_017', type: 'Generated Binder', size: '45 KB', date: '2026-07-18', icon: Box, color: 'text-emerald-500', bg: 'bg-emerald-100' },
+  ];
 
   const handleGenerate = async () => {
     setJobStatus('provisioning');
@@ -239,12 +259,29 @@ export default function App() {
           <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('new_design'); }} className={`flex items-center gap-3 px-6 py-3 transition-colors ${activeTab === 'new_design' ? 'bg-blue-600/10 text-blue-400 border-r-2 border-blue-500' : 'hover:bg-slate-800 text-slate-300'}`}>
             <Activity size={20} /> New Design
           </a>
+          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('history'); }} className={`flex items-center gap-3 px-6 py-3 transition-colors ${activeTab === 'history' ? 'bg-blue-600/10 text-blue-400 border-r-2 border-blue-500' : 'hover:bg-slate-800 text-slate-300'}`}>
+            <Layers size={20} /> Project History
+          </a>
+          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('asset_library'); }} className={`flex items-center gap-3 px-6 py-3 transition-colors ${activeTab === 'asset_library' ? 'bg-blue-600/10 text-blue-400 border-r-2 border-blue-500' : 'hover:bg-slate-800 text-slate-300'}`}>
+            <Box size={20} /> Asset Library
+          </a>
         </nav>
       </aside>
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <header className="bg-white border-b border-slate-200 px-8 py-5 flex items-center justify-between shrink-0">
-          <h1 className="text-2xl font-bold text-slate-800">De Novo Binder Design</h1>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800">
+              {activeTab === 'new_design' ? 'De Novo Binder Design' : 
+               activeTab === 'history' ? 'Project History' : 
+               'Asset Library'}
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">
+              {activeTab === 'new_design' ? 'Design novel proteins targeting specific tumor markers via Neurosnap.' : 
+               activeTab === 'history' ? 'Review past AI protein design generation runs.' : 
+               'Manage target PDBs, scaffolds, and generated binders.'}
+            </p>
+          </div>
         </header>
 
         {activeTab === 'new_design' && (
@@ -259,6 +296,27 @@ export default function App() {
                     <label className="block text-sm font-medium text-slate-700 mb-1">Target PDB ID</label>
                     <input type="text" value={pdbId} onChange={(e) => setPdbId(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg uppercase" />
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Target Chain</label>
+                      <input type="text" value={targetChain} onChange={(e) => setTargetChain(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg uppercase" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Hotspot Residues</label>
+                      <input type="text" value={hotspot} onChange={(e) => setHotspot(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h2 className="text-lg font-semibold mb-4">Binder Parameters</h2>
+                <div>
+                  <div className="flex justify-between mb-1">
+                    <label className="block text-sm font-medium text-slate-700">Binder Length</label>
+                    <span className="text-sm text-blue-600 font-medium">{binderLength}</span>
+                  </div>
+                  <input type="range" min="30" max="150" value={binderLength} onChange={(e) => setBinderLength(e.target.value)} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
                 </div>
               </div>
 
@@ -304,6 +362,62 @@ export default function App() {
                     </div>
                   </div>
                )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'history' && (
+          <div className="flex-1 p-8 overflow-y-auto bg-slate-50/50">
+            <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="grid grid-cols-6 gap-4 p-4 border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-500 uppercase">
+                <div className="col-span-1 pl-2">Project ID</div>
+                <div className="col-span-1">Date</div>
+                <div className="col-span-1">Target</div>
+                <div className="col-span-1 text-center">Candidates</div>
+                <div className="col-span-1 text-center">Top Affinity</div>
+                <div className="col-span-1 text-right pr-2">Status</div>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {mockHistory.map((project) => (
+                  <div key={project.id} className="grid grid-cols-6 gap-4 p-4 items-center hover:bg-slate-50 transition-colors">
+                    <div className="col-span-1 font-semibold text-slate-800 pl-2">{project.id}</div>
+                    <div className="col-span-1 text-slate-500 text-sm flex items-center gap-1.5"><Calendar size={14}/>{project.date}</div>
+                    <div className="col-span-1 text-slate-700 font-medium text-sm">{project.target}</div>
+                    <div className="col-span-1 text-center text-slate-600 text-sm">{project.candidates}</div>
+                    <div className="col-span-1 text-center font-mono text-sm text-blue-600">{project.bestAffinity}</div>
+                    <div className="col-span-1 flex items-center justify-end gap-2 pr-2">
+                      <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-green-100 text-green-700 flex items-center gap-1"><CheckCircle2 size={12}/> {project.status}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'asset_library' && (
+          <div className="flex-1 p-8 overflow-y-auto bg-slate-50/50">
+            <div className="max-w-6xl mx-auto flex flex-col gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {mockAssets.map((asset) => {
+                  const Icon = asset.icon;
+                  return (
+                    <div key={asset.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${asset.bg} ${asset.color}`}>
+                          <Icon size={24} />
+                        </div>
+                      </div>
+                      <h3 className="font-semibold text-slate-800 text-lg mb-1">{asset.name}</h3>
+                      <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md w-max mb-4 ${asset.color} bg-current/10`}>{asset.type}</span>
+                      <div className="border-t border-slate-100 pt-3 mt-auto flex justify-between text-xs text-slate-500">
+                        <span>{asset.date}</span>
+                        <span className="font-medium text-slate-700">{asset.size}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
