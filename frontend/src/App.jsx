@@ -24,7 +24,24 @@ import {
 } from 'lucide-react';
 import * as THREE from 'three';
 
+// Firebase imports
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, addDoc, onSnapshot, query } from 'firebase/firestore';
+
 const API_BASE_URL = 'https://meddesign-backend.onrender.com';
+
+// Firebase initialization
+let app, auth, db, appId;
+try {
+  const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+  appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+} catch (e) {
+  console.warn("Firebase config not found or invalid. Running in local state mode.", e);
+}
 
 const MolecularViewer = ({ status, selectedCandidate }) => {
   const mountRef = useRef(null);
@@ -176,10 +193,25 @@ export default function App() {
   const [candidates, setCandidates] = useState([]);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
 
-  // Dynamic project history state
+  const [user, setUser] = useState(null);
   const [projectHistory, setProjectHistory] = useState([
-    { id: 'PRJ-1042', target: '1TUP (Chain A)', date: '2026-07-18', status: 'Completed', candidates: 2, bestAffinity: -13.2 },
-    { id: 'PRJ-1041', target: '6VXX (Chain B)', date: '2026-07-15', status: 'Completed', candidates: 2, bestAffinity: -11.8 },
+    {
+      id: 'PRJ-1042',
+      target: '1TUP (Chain A)',
+      date: '2026-07-18',
+      status: 'Completed',
+      bestAffinity: -14.1,
+      candidates: [
+        {
+          id: '1TUP_NS_01',
+          affinity: -14.1,
+          pae: 2.1,
+          plddt: 96.2,
+          sequence: 'MAEVKLEIKADGTVLESIKFEGDTVIEFNGDTIIE',
+          pdb: 'HEADER    DE NOVO BINDING PROTEIN 1TUP_NS_01\nATOM      1  N   MET A   1      12.452  18.321  5.432  1.00 96.20     N\nATOM      2  CA  MET A   1      13.123  19.112  6.211  1.00 96.20     C\nEND'
+        }
+      ]
+    }
   ]);
 
   const mockAssets = [
@@ -187,6 +219,60 @@ export default function App() {
     { id: 'AST-002', name: 'Helical_Scaffold_v3', type: 'Scaffold', size: '156 KB', date: '2026-07-10', icon: Layers, color: 'text-purple-500', bg: 'bg-purple-100' },
     { id: 'AST-003', name: 'Binder_Design_042', type: 'Generated Binder', size: '42 KB', date: '2026-07-18', icon: Box, color: 'text-emerald-500', bg: 'bg-emerald-100' },
   ];
+
+  // Auth and Firestore Sync
+  useEffect(() => {
+    if (!auth) return;
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error("Auth error:", err);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user || !db) return;
+    try {
+      const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'projectHistory'));
+      const unsubscribeSnap = onSnapshot(q, (snapshot) => {
+        const loadedProjects = [];
+        snapshot.forEach((doc) => {
+          loadedProjects.push({ id: doc.id, ...doc.data() });
+        });
+        if (loadedProjects.length > 0) {
+          setProjectHistory(prev => {
+            const combined = [...loadedProjects, ...prev];
+            // Deduplicate by project id
+            const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
+            return unique;
+          });
+        }
+      }, (error) => {
+        console.error("Firestore snapshot error:", error);
+      });
+      return () => unsubscribeSnap();
+    } catch (err) {
+      console.error("Error setting up Firestore listener:", err);
+    }
+  }, [user]);
+
+  const saveProjectToCloud = async (projectData) => {
+    if (!user || !db) return;
+    try {
+      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'projectHistory'), projectData);
+    } catch (err) {
+      console.error("Failed to save project to cloud database:", err);
+    }
+  };
 
   const handleGenerate = async () => {
     setJobStatus('provisioning');
@@ -227,24 +313,28 @@ export default function App() {
       setProgress(data.progress);
 
       if (data.status === 'completed') {
-        const fetchedCandidates = data.candidates || [];
+        const fetchedCandidates = (data.candidates || []).map(cand => ({
+          ...cand,
+          pdb: `HEADER    DE NOVO BINDING PROTEIN ${cand.id}\nCOMPND    Target: ${pdbId} Chain ${targetChain}\nAUTHOR    MEDDESIGN AI NEUROSNAP ENGINE\nATOM      1  N   MET A   1      ${(Math.random()*20).toFixed(3)}  ${(Math.random()*20).toFixed(3)}  ${(Math.random()*20).toFixed(3)}  1.00 ${cand.plddt}     N\nATOM      2  CA  MET A   1      ${(Math.random()*20).toFixed(3)}  ${(Math.random()*20).toFixed(3)}  ${(Math.random()*20).toFixed(3)}  1.00 ${cand.plddt}     C\nEND`
+        }));
+
         setCandidates(fetchedCandidates);
         if (fetchedCandidates.length > 0) {
           setSelectedCandidate(fetchedCandidates[0]);
         }
 
-        // Automatically record this completed run into Project History
         const bestAffinity = fetchedCandidates.length > 0 ? Math.min(...fetchedCandidates.map(c => c.affinity)) : 0;
         const newProjectRecord = {
           id: jobId,
           target: `${pdbId.toUpperCase()} (Chain ${targetChain})`,
           date: new Date().toISOString().split('T')[0],
           status: 'Completed',
-          candidates: fetchedCandidates.length,
-          bestAffinity: bestAffinity
+          bestAffinity: bestAffinity,
+          candidates: fetchedCandidates
         };
 
         setProjectHistory(prev => [newProjectRecord, ...prev.filter(p => p.id !== jobId)]);
+        saveProjectToCloud(newProjectRecord);
 
       } else if (data.status === 'error') {
         setJobStatus('error');
@@ -257,7 +347,6 @@ export default function App() {
     }
   };
 
-  // Helper function to trigger file downloads for PDB structure or FASTA sequence
   const downloadFile = (filename, content, mimeType) => {
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
@@ -270,18 +359,16 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const handleDownloadPDB = () => {
-    if (!selectedCandidate) return;
-    const mockPdbContent = `HEADER    DE NOVO DESIGNED BINDING PROTEIN\nCOMPND    ID: ${selectedCandidate.id}\nAUTHOR    MEDDESIGN AI ORCHESTRATOR\nATOM      1  N   MET A   1      {Math.random().toFixed(3)}  {Math.random().toFixed(3)}  {Math.random().toFixed(3)}  1.00 95.00          N\nATOM      2  CA  MET A   1      {Math.random().toFixed(3)}  {Math.random().toFixed(3)}  {Math.random().toFixed(3)}  1.00 95.00          C\nEND`;
-    downloadFile(`${selectedCandidate.id}_structure.pdb`, mockPdbContent, 'text/plain');
+  const handleDownloadPDB = (cand) => {
+    if (!cand || !cand.pdb) return;
+    downloadFile(`${cand.id}_structure.pdb`, cand.pdb, 'text/plain');
   };
 
-  const handleDownloadFasta = () => {
-    if (!selectedCandidate) return;
-    // Translate protein sequence to RNA sequence simulation (A->A, C->C, G->G, U/T)
-    const rnaSequence = selectedCandidate.sequence.replace(/T/g, 'U');
-    const fastaContent = `> ${selectedCandidate.id} | Designed Protein Sequence\n${selectedCandidate.sequence}\n> ${selectedCandidate.id}_mRNA | Translated RNA Codon Sequence\n${rnaSequence}`;
-    downloadFile(`${selectedCandidate.id}_sequences.fasta`, fastaContent, 'text/plain');
+  const handleDownloadFasta = (cand) => {
+    if (!cand || !cand.sequence) return;
+    const rnaSequence = cand.sequence.replace(/T/g, 'U');
+    const fastaContent = `> ${cand.id} | Designed Protein Sequence\n${cand.sequence}\n> ${cand.id}_mRNA | Translated RNA Codon Sequence\n${rnaSequence}`;
+    downloadFile(`${cand.id}_sequences.fasta`, fastaContent, 'text/plain');
   };
 
   return (
@@ -309,22 +396,22 @@ export default function App() {
           <div>
             <h1 className="text-2xl font-bold text-slate-800">
               {activeTab === 'new_design' ? 'De Novo Binder Design' : 
-               activeTab === 'history' ? 'Project History' : 
+               activeTab === 'history' ? 'Project History & Cloud Storage' : 
                'Asset Library'}
             </h1>
             <p className="text-sm text-slate-500 mt-1">
               {activeTab === 'new_design' ? 'Design novel proteins targeting specific tumor markers via Neurosnap.' : 
-               activeTab === 'history' ? 'Review past AI protein design generation runs.' : 
+               activeTab === 'history' ? 'Access saved calculation runs from cloud database and download PDB/FASTA files for any candidate.' : 
                'Manage target PDBs, scaffolds, and generated binders.'}
             </p>
           </div>
           {jobStatus === 'completed' && selectedCandidate && activeTab === 'new_design' && (
             <div className="flex gap-3">
-              <button onClick={handleDownloadPDB} className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-xl text-sm flex items-center gap-2 shadow-sm transition-all">
-                <Download size={16} /> Download PDB Structure
+              <button onClick={() => handleDownloadPDB(selectedCandidate)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-xl text-sm flex items-center gap-2 shadow-sm transition-all">
+                <Download size={16} /> Download PDB
               </button>
-              <button onClick={handleDownloadFasta} className="bg-purple-600 hover:bg-purple-700 text-white font-medium px-4 py-2 rounded-xl text-sm flex items-center gap-2 shadow-sm transition-all">
-                <Download size={16} /> Download Protein/RNA FASTA
+              <button onClick={() => handleDownloadFasta(selectedCandidate)} className="bg-purple-600 hover:bg-purple-700 text-white font-medium px-4 py-2 rounded-xl text-sm flex items-center gap-2 shadow-sm transition-all">
+                <Download size={16} /> Download FASTA
               </button>
             </div>
           )}
@@ -415,29 +502,44 @@ export default function App() {
 
         {activeTab === 'history' && (
           <div className="flex-1 p-8 overflow-y-auto bg-slate-50/50">
-            <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="grid grid-cols-6 gap-4 p-4 border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-500 uppercase">
-                <div className="col-span-1 pl-2">Project ID</div>
-                <div className="col-span-1">Date</div>
-                <div className="col-span-1">Target</div>
-                <div className="col-span-1 text-center">Candidates</div>
-                <div className="col-span-1 text-center">Top Affinity</div>
-                <div className="col-span-1 text-right pr-2">Status</div>
-              </div>
-              <div className="divide-y divide-slate-100">
-                {projectHistory.map((project) => (
-                  <div key={project.id} className="grid grid-cols-6 gap-4 p-4 items-center hover:bg-slate-50 transition-colors">
-                    <div className="col-span-1 font-semibold text-slate-800 pl-2">{project.id}</div>
-                    <div className="col-span-1 text-slate-500 text-sm flex items-center gap-1.5"><Calendar size={14}/>{project.date}</div>
-                    <div className="col-span-1 text-slate-700 font-medium text-sm">{project.target}</div>
-                    <div className="col-span-1 text-center text-slate-600 text-sm">{project.candidates}</div>
-                    <div className="col-span-1 text-center font-mono text-sm text-blue-600">{project.bestAffinity}</div>
-                    <div className="col-span-1 flex items-center justify-end gap-2 pr-2">
-                      <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-green-100 text-green-700 flex items-center gap-1"><CheckCircle2 size={12}/> {project.status}</span>
+            <div className="max-w-6xl mx-auto space-y-6">
+              {projectHistory.map((project) => (
+                <div key={project.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col gap-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                    <div>
+                      <span className="font-bold text-lg text-slate-800">{project.id}</span>
+                      <span className="ml-3 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{project.target}</span>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-slate-500">
+                      <span className="flex items-center gap-1.5"><Calendar size={14}/> {project.date}</span>
+                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 flex items-center gap-1"><CheckCircle2 size={12}/> {project.status}</span>
                     </div>
                   </div>
-                ))}
-              </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {project.candidates && project.candidates.map((cand) => (
+                      <div key={cand.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between gap-3">
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-bold text-slate-800">{cand.id}</span>
+                            <span className="text-xs font-mono text-blue-600 font-semibold">Affinity: {cand.affinity}</span>
+                          </div>
+                          <div className="text-xs text-slate-500">pLDDT: {cand.plddt} | PAE: {cand.pae}</div>
+                          <div className="text-xs font-mono text-slate-600 truncate mt-1">Seq: {cand.sequence}</div>
+                        </div>
+                        <div className="flex gap-2 pt-2 border-t border-slate-200/60">
+                          <button onClick={() => handleDownloadPDB(cand)} className="flex-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-medium py-1.5 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors">
+                            <Download size={14} /> PDB File
+                          </button>
+                          <button onClick={() => handleDownloadFasta(cand)} className="flex-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-medium py-1.5 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors">
+                            <Download size={14} /> FASTA
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
